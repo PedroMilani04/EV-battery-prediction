@@ -1,0 +1,6 @@
+# Data files
+data/processed/*.csv
+data/processed/*.parquet
+data/raw/**/*.csv
+data/raw/**/*.parquet
+data/raw/**/*.mat
