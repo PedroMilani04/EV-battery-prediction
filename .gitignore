@@ -4,3 +4,4 @@ data/processed/*.parquet
 data/raw/**/*.csv
 data/raw/**/*.parquet
 data/raw/**/*.mat
+data/raw/**/*.m 
