@@ -64,7 +64,7 @@ def convert_crate(mat: dict, output_dir: str, stem: str):
 
 
 def convert_multi_cell(mat: dict, output_dir: str, stem: str):
-    """a
+    """aa
     CAPACI_2 / HPPC: matriz (15 diag × 10 células) com arrays de séries temporais.
     Colunas: diag_number, cell, time_s, voltage_V, current_A
     Saída: um CSV único  →  stem.csv
