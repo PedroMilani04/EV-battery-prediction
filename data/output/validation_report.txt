@@ -1,0 +1,57 @@
+=================================================================
+VALIDATION REPORT — Battery Degradation Pipeline
+Generated on: 2026-07-01
+=================================================================
+
+[CHECK 5.1] SoH monotonically decreasing with EFC per vehID
+  EV1: PASS
+  EV10: PASS
+  EV13: PASS
+  EV4: PASS
+  EV7: PASS
+
+[CHECK 5.2] Cumulative EFC within laboratory range
+  Max observed lab EFC: 221.4
+  EV1: EFC_max=6.52  OK
+  EV10: EFC_max=7.25  OK
+  EV13: EFC_max=4.51  OK
+  EV4: EFC_max=4.57  OK
+  EV7: EFC_max=4.07  OK
+  All within the range: PASS
+
+[CHECK 5.3] Physically coherent degradation order
+       DoD_medio_por_viagem  EFC_para_EOL  Viagens_para_EOL
+vehID                                                      
+EV10                   0.35        464.04           1344.20
+EV1                    0.31        464.04           1494.65
+EV4                    0.22        464.04           2132.60
+EV13                   0.21        464.04           2159.71
+EV7                    0.19        464.04           2396.09
+
+  Physical coherence (higher DoD → fewer trips to EOL): PASS
+  Estimated EFC for EOL (SoH=0.8): 464.0
+
+=================================================================
+DOCUMENTED LIMITATIONS
+=================================================================
+  Fixed DoD in the laboratory protocol (60%, UDDS 80%→20% SoC): the SoH(EFC) curve
+  was fitted under this specific DoD and does not generalize to
+  arbitrary discharge patterns — this is a simplifying Phase 1 assumption.
+  
+  No charging events in d-EVD: the driving dataset does not
+  contain recharge data; the impact of charge rate (C-rate) on
+  degradation could not be incorporated into the real vehicle usage profile.
+  
+  cycle_count_estimated=True for 36 diagnostics (G1, V4, W10, W5, W8, W9):
+  values extrapolated from the last known interval — treat predictions
+  in this EFC region with higher uncertainty.
+  
+  Discontinued cells W3 and W7 were excluded from the fit (anomalous
+  behavior documented by the dataset authors).
+  
+  The XGBoost model (Phase 4 A2) with vehID dummy does not generalize to
+  vehicle models unseen during training — the dummy acts as a proxy
+  for pack capacity and vehicle-specific aerodynamic style.
+  
+  The 21 routes per vehicle represent a minimal fraction of real useful life
+  (EFC accumulated 4–7 out of an estimated ~400–500 for EOL).

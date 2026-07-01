@@ -96,8 +96,50 @@ Em especial pela profundidade de árvores e generalização proporcionadas.
 
 A ideia principal é a de testar o modelo sem e com vehID como um one-hot encoding, visando um possível aumento de desempenho. Na ideia inicial, de interpretação de comportamento de condução, o vehID não teria tanto sentido, mas visando um aumento no ganho de R^2 no valor das predições, ele foi adotado como uma dummy feature. 
 
+Treinamos com o LOO-CV (Leave-One-Out Cross Validation):
+Para cada uma das 105 observações:
+    Treina com as outras 104  (≈99% dos dados)
+    Prevê a 1 que ficou fora
+    Registra o erro
+
+R² final = calculado sobre as 105 previsões "fora da amostra"
+
+Com n=105, um split 80/20 deixaria só 21 amostras para teste — e com 5 veículos × 21 rotas, um split aleatório poderia facilmente deixar um veículo inteiro sub-representado no teste, tornando as métricas muito instáveis dependendo do seed.
+
 O teste com vehID apresentou um aumento significativo, de cerca de 0.85 de R^2 para 0.95. Os resíduos continuam seguindo a mesma forma de aleatóridade, o que é um bom sinal, sem aparente vazamento de dados. 
+
+O que aconteceu:
+| vehID | DoD real médio | Sem dummy (pred médio) | Com dummy (pred médio) |
+| --- | --- | --- | --- |
+| EV10 | 0.345 | 0.275 ← subestima | 0.321 ← muito melhor |
+| EV1 | 0.310 | 0.272 ← subestima | 0.285 ← melhor |
+| EV4 | 0.218 | 0.266 ← superestima | 0.231 ← muito melhor |
+| EV7 | 0.194 | 0.235 ← superestima | 0.203 ← muito melhor |
+
+Sem o dummy, o XGBoost aprende uma relação única entre distância/topografia e DoD para todos os veículos misturados. Como o EV10 (eUp, pack menor) e EV4 (ID3, pack maior) fazem as mesmas rotas mas consomem frações de bateria muito diferentes, o modelo sem dummy tenta achar um "meio-termo" e erra sistematicamente dos dois lados.
+
+Com o dummy, o XGBoost pode aprender: "para esta rota de 80km, um EV10 consome ~0.55 de fração enquanto um EV7 consome ~0.30" — ou seja, a relação distância→DoD tem uma inclinação diferente por veículo, e o dummy permite que o boosting capture isso.
 
 Disponível em: /data/processed/models/
 
+## Fase 5 e 6
+Os outputs são o resultado final do projeto:
 
+| Figura | O que é |
+| --- | --- |
+| `fig1_soh_efc_projection` | Curva exp. (Fase 1) + DoD_equivalente **real** do d-EVD (Fase 2) |
+| `fig2_dod_distribution` | DoD_equivalente **real** do d-EVD (Fase 2) |
+| `fig3_xgb_predicted_vs_real` | Previsões do **XGBoost** vs. DoD_equivalente real |
+| `fig4_degradation_by_vehicle` | DoD_equivalente **real** acumulado + curva exp. (Fase 1) |
+
+Disponível em: /data/processed/output/
+
+
+# Conclusão
+Durante o projeto, de sua concepção, conseguimos conectar o conhecimento da degradação e ciclo de vida de baterias de Ion-Litío e expandir sua escala para aplicação em baterias similares mas de maior magnitude em veículos elétricos. A chave comum foi a variável adimensional (DoD_equivalente / EFC) como conversação entre a célula de laboratório e a escala de pack de veículo real. 
+
+A degradação é previsível a partir do perfil de condução. A curva exponencial SoH = exp(-0.000481 × EFC) ajustada nos dados de laboratório, aplicada sobre o EFC acumulado das rotas simuladas, gera previsões fisicamente coerentes: veículos com pack menor (eUp, i3) acumulam EFC mais rápido e atingem o fim de vida antes que veículos com pack maior (ID4, SUV).
+
+O XGBoost consegue prever o consumo de EFC de uma rota sem simular o veículo completo. R²=0.955 com LOO-CV para os 5 veículos conhecidos — o que significa que, dado o perfil de uma rota (distância, topografia, metadados) e o modelo do veículo, conseguimos estimar quanto aquela rota vai degradar a bateria sem precisar rodar a simulação SUMO.
+
+Em vista de tudo isso, não validamos contra degradação real medida, pela própria natureza dos dados disponíveis. A curva SoH(EFC) vem de células em laboratório sob um protocolo específico (60% DoD, padrão UDDS). Nunca tivemos um veículo real com histórico de uso E medição de capacidade ao longo do tempo para comparar. O pipeline é metodologicamente sólido, mas não tem ground truth de campo.
