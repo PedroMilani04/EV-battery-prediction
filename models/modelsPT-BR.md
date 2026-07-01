@@ -89,3 +89,5 @@ Disponível em: /data/processed/analysis/
 5. metadados: traffic_factor, occupancy, auxiliaries e wind, que são os parâmetros que a simulação varia de propósito (tráfego, ocupação, ar-condicionado, vento), têm correlação perto de zero com DoD_equivalente (entre -0.11 e 0.01)
 
 No geral, tamanho da rota explica quase tudo (~74% da variância via r²≈0.86²); topografia (subida) adiciona um efeito real, mas menor; estilo de condução agressivo parece ter efeito, mas está confundido pela normalização por km; e os parâmetros de configuração da simulação (tráfego, ocupação, AC, vento) não mostram efeito detectável nessa análise simples
+
+### Modelos de Aprendizado
