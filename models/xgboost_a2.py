@@ -1,41 +1,41 @@
 """
-Fase 4, Interpretação A2 v2 — XGBoost com vehID como dummy
+Phase 4, Interpretation A2 v2 — XGBoost with vehID as dummy
 
-Mudanças em relação à versão anterior:
-- vehID incluído como dummy (one-hot encoding) — proxy legítima de
-  capacidade nominal do pack, que resolve o viés sistemático por veículo
-  que observamos nos resíduos da versão anterior (eUp/i3 subestimados,
-  ID4/ID3 superestimados).
-- Adicionado: busca de hiperparâmetros via GridSearchCV aninhado ao
-  LOO-CV, e SHAP values para interpretabilidade.
+Changes from the previous version:
+- vehID included as a dummy (one-hot encoding) — a legitimate proxy for
+  pack nominal capacity, which resolves the systematic vehicle bias we
+  observed in the previous version residuals (eUp/i3 underestimated,
+  ID4/ID3 overestimated).
+- Added: hyperparameter search via nested GridSearchCV inside LOO-CV, and
+  SHAP values for interpretability.
 
-Por que XGBoost e não Random Forest ou Decision Tree profunda:
-- n=105, por exemplo, é pequeno — boosting com árvores rasas (max_depth 2-4) generaliza
-  melhor que uma tree profunda ou RF com muitas árvores nesse regime.
-- XGBoost tem regularização nativa (lambda, alpha) que controla overfitting
-  explicitamente, ao contrário de uma Decision Tree simples.
-- SHAP values estão integrados nativamente no XGBoost, facilitando
-  interpretabilidade sem custo extra.
+Why XGBoost and not Random Forest or a deep Decision Tree:
+- n=105 is small, for example — boosting with shallow trees (max_depth 2-4)
+  generalizes better than a deep tree or RF with many trees in this regime.
+- XGBoost has native regularization (lambda, alpha) that explicitly controls
+  overfitting, unlike a simple Decision Tree.
+- SHAP values are natively integrated in XGBoost, making interpretability
+  easier with no extra cost.
 
-Por que vehID como dummy é legítimo aqui (vs. versão anterior):
-- Na v1, excluímos vehID porque ele covária com nominal_capacity_Wh
-  (que é redundante com o target). Mas o viés sistemático que observamos
-  por veículo prova que existe informação real no vehID além da capacidade
-  — estilo aerodinâmico, eficiência do motor, peso, regeneração — que
-  o modelo precisa para generalizar entre veículos. Incluir como dummy
-  captura isso sem incluir a capacidade numérica diretamente.
+Why vehID as dummy is legitimate here (vs. the previous version):
+- In v1, we excluded vehID because it covaries with nominal_capacity_Wh
+  (which is redundant with the target). But the systematic vehicle bias we
+  observed shows there is real information in vehID beyond capacity —
+  aerodynamic style, motor efficiency, weight, regeneration — that the
+  model needs to generalize across vehicles. Including it as a dummy
+  captures this without including numeric capacity directly.
 
-Entrada:
+Input:
     data/processed/ev/ev_trip_features.csv
 
-Saídas (em data/processed/models/):
-    a2_xgb_results.csv          — métricas LOO-CV (com e sem vehID dummy)
-    a2_xgb_predictions.csv      — previsto vs real por observação
-    a2_xgb_residuals.png        — resíduos por vehID
+Outputs (in data/processed/models/):
+    a2_xgb_results.csv          — LOO-CV metrics (with and without vehID dummy)
+    a2_xgb_predictions.csv      — predicted vs actual per observation
+    a2_xgb_residuals.png        — residuals by vehID
     a2_xgb_shap.png             — SHAP summary plot
     a2_xgb_predicted_vs_real.png
 
-Dependências:
+Dependencies:
     pip install pandas numpy matplotlib seaborn scikit-learn xgboost shap
 """
 
@@ -54,7 +54,7 @@ from sklearn.compose import ColumnTransformer
 import xgboost as xgb
 
 # ---------------------------------------------------------------------------
-# Configuração
+# Configuration
 # ---------------------------------------------------------------------------
 
 PROCESSED_DIR = Path("data/processed")
@@ -77,8 +77,8 @@ FEATURES_NUMERIC = [
 
 RANDOM_STATE = 42
 
-# Grid de hiperparâmetros — conservador dado n=105
-# Árvores rasas (max_depth 2-4) + n_estimators moderado + regularização
+# Hyperparameter grid — conservative given n=105
+# Shallow trees (max_depth 2-4) + moderate n_estimators + regularization
 PARAM_GRID = {
     "xgb__n_estimators":  [50, 100, 200],
     "xgb__max_depth":     [2, 3, 4],
@@ -89,13 +89,13 @@ PARAM_GRID = {
 
 
 # ---------------------------------------------------------------------------
-# Pré-processamento
+# Preprocessing
 # ---------------------------------------------------------------------------
 
 def build_feature_matrix(df: pd.DataFrame, include_vehid: bool) -> np.ndarray:
     """
-    Retorna X com features numéricas + (opcional) dummies de vehID.
-    OneHotEncoder com drop='first' para evitar multicolinearidade perfeita.
+    Returns X with numeric features + optional vehID dummies.
+    OneHotEncoder with drop='first' avoids perfect multicollinearity.
     """
     if include_vehid:
         preprocessor = ColumnTransformer([
@@ -108,7 +108,7 @@ def build_feature_matrix(df: pd.DataFrame, include_vehid: bool) -> np.ndarray:
 
 
 def get_feature_names(preprocessor, df: pd.DataFrame) -> list:
-    """Retorna nomes de todas as features após encoding, para o SHAP plot."""
+    """Returns the names of all features after encoding, for the SHAP plot."""
     if preprocessor is None:
         return FEATURES_NUMERIC
     veh_cats = preprocessor.named_transformers_["veh"].categories_[0][1:]  # drop='first'
@@ -116,15 +116,15 @@ def get_feature_names(preprocessor, df: pd.DataFrame) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Avaliação via LOO-CV com busca de hiperparâmetros
+# Evaluation via LOO-CV with hyperparameter search
 # ---------------------------------------------------------------------------
 
 def evaluate_xgb(X: np.ndarray, y: np.ndarray, label: str) -> dict:
     """
-    LOO-CV externo + GridSearchCV interno (nested CV).
-    Para cada fold LOO, o GridSearchCV encontra os melhores hiperparâmetros
-    usando os n-1 exemplos de treino — evita vazamento de informação do
-    teste para a seleção de hiperparâmetros.
+    External LOO-CV + internal GridSearchCV (nested CV).
+    For each LOO fold, GridSearchCV finds the best hyperparameters using
+    the n-1 training examples — preventing test information leakage into
+    hyperparameter selection.
     """
     loo = LeaveOneOut()
     y_pred = np.zeros(len(y))
@@ -139,7 +139,7 @@ def evaluate_xgb(X: np.ndarray, y: np.ndarray, label: str) -> dict:
 
     inner_cv = GridSearchCV(
         base_pipe, PARAM_GRID,
-        cv=5,                    # 5-fold dentro de cada fold LOO
+        cv=5,                    # 5-fold inside each LOO fold
         scoring="neg_root_mean_squared_error",
         n_jobs=-1,
         refit=True,
@@ -155,13 +155,13 @@ def evaluate_xgb(X: np.ndarray, y: np.ndarray, label: str) -> dict:
         best_params_list.append(inner_cv.best_params_)
 
         if (i + 1) % 20 == 0:
-            print(f"  {label}: {i+1}/{len(y)} folds concluídos...")
+            print(f"  {label}: {i+1}/{len(y)} folds completed...")
 
     r2   = r2_score(y, y_pred)
     mae  = mean_absolute_error(y, y_pred)
     rmse = np.sqrt(mean_squared_error(y, y_pred))
 
-    # Hiperparâmetros mais frequentes ao longo dos folds (moda)
+    # Most frequent hyperparameters across folds (mode)
     params_df   = pd.DataFrame(best_params_list)
     modal_params = params_df.mode().iloc[0].to_dict()
 
@@ -177,8 +177,8 @@ def evaluate_xgb(X: np.ndarray, y: np.ndarray, label: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Treino final (todos os dados, melhores hiperparâmetros modais)
-# para SHAP e análise de importância
+# Final training (all data, modal hyperparameters)
+# for SHAP and importance analysis
 # ---------------------------------------------------------------------------
 
 def train_final_model(X: np.ndarray, y: np.ndarray, modal_params: dict) -> xgb.XGBRegressor:
@@ -197,7 +197,7 @@ def train_final_model(X: np.ndarray, y: np.ndarray, modal_params: dict) -> xgb.X
 
 
 # ---------------------------------------------------------------------------
-# Visualizações
+# Visualizations
 # ---------------------------------------------------------------------------
 
 def plot_residuals(df: pd.DataFrame, results: list, output_path: Path) -> None:
@@ -212,8 +212,8 @@ def plot_residuals(df: pd.DataFrame, results: list, output_path: Path) -> None:
             idx = grp.index.tolist()
             ax.scatter(res["y_pred"][idx], residuals[idx], alpha=0.75, s=30, label=veh)
         ax.axhline(0, color="black", linewidth=1)
-        ax.set_xlabel("Previsto (DoD_equivalente)")
-        ax.set_ylabel("Resíduo (real − previsto)")
+        ax.set_xlabel("Predicted (DoD_equivalente)")
+        ax.set_ylabel("Residual (actual − predicted)")
         ax.set_title(f"XGBoost — {res['label']}\nR²={res['R2_loocv']:.3f} | RMSE={res['RMSE_loocv']:.4f}")
         ax.legend(fontsize=8, title="vehID")
 
@@ -234,9 +234,9 @@ def plot_predicted_vs_real(df: pd.DataFrame, results: list, output_path: Path) -
             ax.scatter(y_true[idx], res["y_pred"][idx], alpha=0.75, s=30, label=veh)
         lims = [min(y_true.min(), res["y_pred"].min()) - 0.02,
                 max(y_true.max(), res["y_pred"].max()) + 0.02]
-        ax.plot(lims, lims, "k--", linewidth=1, label="perfeito")
-        ax.set_xlabel("Real (DoD_equivalente)")
-        ax.set_ylabel("Previsto")
+        ax.plot(lims, lims, "k--", linewidth=1, label="perfect")
+        ax.set_xlabel("Actual (DoD_equivalente)")
+        ax.set_ylabel("Predicted")
         ax.set_title(f"XGBoost — {res['label']}\nR²={res['R2_loocv']:.3f}")
         ax.legend(fontsize=8, title="vehID")
 
@@ -255,18 +255,18 @@ def plot_shap(model: xgb.XGBRegressor, X: np.ndarray,
         plt.figure(figsize=(10, 6))
         shap.summary_plot(shap_values, X, feature_names=feature_names,
                           show=False, plot_size=None)
-        plt.title("SHAP summary — XGBoost com vehID dummy")
+        plt.title("SHAP summary — XGBoost with vehID dummy")
         plt.tight_layout()
         plt.savefig(output_path, dpi=150, bbox_inches="tight")
         plt.close()
-        print("  SHAP plot salvo.")
+        print("  SHAP plot saved.")
     except ImportError:
-        print("  AVISO: 'shap' não instalado — plot SHAP pulado.")
-        print("  Para instalar: pip install shap")
+        print("  WARNING: 'shap' not installed — SHAP plot skipped.")
+        print("  To install: pip install shap")
 
 
 # ---------------------------------------------------------------------------
-# Pipeline principal
+# Main pipeline
 # ---------------------------------------------------------------------------
 
 def main() -> None:
@@ -278,39 +278,39 @@ def main() -> None:
     results = []
     predictions_out = df[["vehID", "route_file", TARGET]].copy()
 
-    # --- Variante 1: sem vehID (baseline para comparação justa) ---
-    print("Avaliando XGBoost SEM vehID dummy...")
+    # --- Variant 1: without vehID (baseline for fair comparison) ---
+    print("Evaluating XGBoost WITHOUT vehID dummy...")
     X_base, _ = build_feature_matrix(df, include_vehid=False)
     res_base   = evaluate_xgb(X_base, y, label="sem_vehID")
     results.append(res_base)
     predictions_out["pred_xgb_sem_vehid"] = res_base["y_pred"]
     print(f"  → R²={res_base['R2_loocv']:.3f} | MAE={res_base['MAE_loocv']:.4f} | "
           f"RMSE={res_base['RMSE_loocv']:.4f}")
-    print(f"  Hiperparâmetros modais: {res_base['modal_params']}\n")
+    print(f"  Modal hyperparameters: {res_base['modal_params']}\n")
 
-    # --- Variante 2: com vehID dummy ---
-    print("Avaliando XGBoost COM vehID dummy...")
+    # --- Variant 2: with vehID dummy ---
+    print("Evaluating XGBoost WITH vehID dummy...")
     X_veh, preprocessor = build_feature_matrix(df, include_vehid=True)
     res_veh = evaluate_xgb(X_veh, y, label="com_vehID_dummy")
     results.append(res_veh)
     predictions_out["pred_xgb_com_vehid"] = res_veh["y_pred"]
     print(f"  → R²={res_veh['R2_loocv']:.3f} | MAE={res_veh['MAE_loocv']:.4f} | "
           f"RMSE={res_veh['RMSE_loocv']:.4f}")
-    print(f"  Hiperparâmetros modais: {res_veh['modal_params']}\n")
+    print(f"  Modal hyperparameters: {res_veh['modal_params']}\n")
 
-    # --- Ganho do vehID dummy ---
+    # --- vehID dummy gain ---
     delta_r2 = res_veh["R2_loocv"] - res_base["R2_loocv"]
-    print(f"Ganho de R² com vehID dummy: {delta_r2:+.4f}")
+    print(f"R² gain with vehID dummy: {delta_r2:+.4f}")
 
-    # --- Resíduos por vehID (melhor variante) ---
+    # --- Residuals by vehID (best variant) ---
     best = max(results, key=lambda r: r["R2_loocv"])
     predictions_out["residuo"] = y - best["y_pred"]
-    print(f"\n=== Resíduo médio por vehID — XGBoost {best['label']} ===")
+    print(f"\n=== Mean residual by vehID — XGBoost {best['label']} ===")
     print(predictions_out.groupby("vehID")["residuo"]
           .agg(["mean", "std", "count"]).round(4).to_string())
 
-    # --- Treino final (todos os dados) para SHAP ---
-    print("\nTreinando modelo final (todos os dados) para SHAP...")
+    # --- Final training (all data) for SHAP ---
+    print("\nTraining final model (all data) for SHAP...")
     feat_names = get_feature_names(preprocessor, df)
     final_model = train_final_model(X_veh, y, res_veh["modal_params"])
 
@@ -327,7 +327,7 @@ def main() -> None:
     plot_shap(final_model, X_veh, feat_names,
               OUTPUT_DIR / "a2_xgb_shap.png")
 
-    print(f"\nArquivos salvos em: {OUTPUT_DIR}/")
+    print(f"\nFiles saved in: {OUTPUT_DIR}/")
     print("  a2_xgb_results.csv")
     print("  a2_xgb_predictions.csv")
     print("  a2_xgb_residuals.png")

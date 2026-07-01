@@ -1,26 +1,26 @@
 """
-Fase 2 — Processamento do d-EVD (rotas de condução)
+Phase 2 — d-EVD processing (driving routes)
 
-Entrada (vindo de data/processed/, conforme convenção do projeto):
+Input (from data/processed/, per project convention):
     data/processed/ev_routes/*.csv
-        arquivos separados por ';', um por rota/configuração de simulação.
-        Nome esperado: "{idx}_{origin}_{destination}_{trafficFactor}_
+        files separated by ';', one per route/simulation configuration.
+        Expected name: "{idx}_{origin}_{destination}_{trafficFactor}_
         {occupancy}_{auxiliaries}_{wind}[_output].csv"
 
-Saída:
+Output:
     data/processed/ev/ev_trip_features.csv
-        uma linha por (vehID, route_file), só para vehIDs de estilo "normal"
+        one row per (vehID, route_file), only for normal-style vehIDs.
 
-Premissas documentadas:
-- STEP_DURATION_S = 1.0s — não encontrei confirmação explícita do
-  step-length da simulação SUMO na documentação pública do d-EVD;
-  assumido o default da ferramenta. Se você tiver o .sumocfg original,
-  ajuste essa constante antes de confiar em `duracao_h`/`C_rate_medio`.
-- AGGRESSIVE_ACCEL_THRESHOLD = 2.0 m/s² — limiar arbitrário para contar
-  "eventos agressivos"; ajustável, não vem de nenhuma fonte do paper.
-- DoD_pct assume que toda rota começa com SoC=100% (consistente com os
-  exemplos vistos até agora). Não validamos isso ainda linha a linha —
-  o script imprime um aviso se algum primeiro step não estiver em 100%.
+Documented assumptions:
+- STEP_DURATION_S = 1.0s — no explicit confirmation of the SUMO
+  simulation step length was found in the public d-EVD documentation;
+  the tool default was assumed. If you have the original .sumocfg,
+  adjust this constant before relying on `duracao_h`/`C_rate_medio`.
+- AGGRESSIVE_ACCEL_THRESHOLD = 2.0 m/s² — arbitrary threshold for counting
+  "aggressive events"; adjustable, not sourced from the paper.
+- DoD_pct assumes the trip starts at SoC=100% (consistent with observed
+  examples so far). This has not been validated line by line yet —
+  the script prints a warning if any first step is not at 100%.
 """
 
 from pathlib import Path
@@ -30,7 +30,7 @@ import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Configuração
+# Configuration
 # ---------------------------------------------------------------------------
 
 PROCESSED_DIR = Path("data/processed")
@@ -38,7 +38,7 @@ EV_ROUTES_DIR = PROCESSED_DIR / "EV"
 OUTPUT_FILE = PROCESSED_DIR / "EV" / "ev_trip_features.csv"
 
 NORMAL_STYLE_VEHIDS = {"EV1", "EV4", "EV7", "EV10", "EV13"}
-STEP_DURATION_S = 1.0          # ASSUNÇÃO — ver docstring
+STEP_DURATION_S = 1.0          # ASSUMPTION — see docstring
 AGGRESSIVE_ACCEL_THRESHOLD = 2.0  # m/s²
 
 FILENAME_PATTERN = re.compile(
@@ -55,7 +55,7 @@ REQUIRED_COLUMNS = {
 
 
 # ---------------------------------------------------------------------------
-# Parsing de nome de arquivo (metadados da simulação)
+# Filename parsing (simulation metadata)
 # ---------------------------------------------------------------------------
 
 def parse_filename(path: Path) -> dict:
@@ -78,7 +78,7 @@ def parse_filename(path: Path) -> dict:
 def list_route_files(directory: Path) -> list:
     files = sorted(directory.glob("*.csv"))
     if not files:
-        raise FileNotFoundError(f"Nenhum CSV encontrado em {directory}")
+        raise FileNotFoundError(f"No CSV files found in {directory}")
     return files
 
 
@@ -87,7 +87,7 @@ def load_route_file(path: Path) -> pd.DataFrame:
     df.columns = [c.strip() for c in df.columns]
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
-        raise ValueError(f"Colunas faltando em {path.name}: {missing}")
+        raise ValueError(f"Missing columns in {path.name}: {missing}")
     return df
 
 
@@ -100,8 +100,8 @@ def compute_trip_features(df_vehicle: pd.DataFrame, route_name: str) -> dict:
     first, last = g.iloc[0], g.iloc[-1]
 
     if abs(first["SoC(%)"] - 100.0) > 1e-3:
-        print(f"AVISO: {route_name} — primeiro step com SoC={first['SoC(%)']:.2f}% "
-              "(esperado 100%). DoD_pct pode estar subestimado.")
+        print(f"WARNING: {route_name} — first step has SoC={first['SoC(%)']:.2f}% "
+              "(expected 100%). DoD_pct may be underestimated.")
 
     nominal_capacity_Wh = first["actualBatteryCapacity(Wh)"]
     dod_pct = 100.0 - last["SoC(%)"]
@@ -168,7 +168,7 @@ def process_all_routes(directory: Path) -> pd.DataFrame:
             rows.append(feats)
 
     if parse_failures:
-        print(f"AVISO: {len(parse_failures)} arquivo(s) fora do padrão de nome esperado, ignorados:")
+        print(f"WARNING: {len(parse_failures)} file(s) did not match the expected name pattern and were skipped:")
         for f in parse_failures:
             print(f"  - {f}")
 
@@ -182,7 +182,7 @@ def main() -> pd.DataFrame:
     df.to_csv(OUTPUT_FILE, index=False)
 
     print(df.head(10))
-    print(f"\n{len(df)} linhas (vehID x rota) salvas em {OUTPUT_FILE}")
+    print(f"\n{len(df)} rows (vehID x route) saved to {OUTPUT_FILE}")
     return df
 
 

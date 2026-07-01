@@ -63,7 +63,7 @@ def load_capacity_test(path: Path) -> pd.DataFrame:
     required = {"diag_number", "cell", "time_s", "voltage_V", "current_A"}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"Colunas faltando em {path.name}: {missing}")
+        raise ValueError(f"Missing columns in {path.name}: {missing}")
 
     # Coerce numeric data and drop rows with invalid measurement samples.
     df["time_s"] = pd.to_numeric(df["time_s"], errors="coerce")
@@ -73,7 +73,7 @@ def load_capacity_test(path: Path) -> pd.DataFrame:
     invalid = df["time_s"].isna() | df["current_A"].isna()
     if invalid.any():
         count = invalid.sum()
-        print(f"AVISO: {count} linha(s) inválidas em {path.name} removidas por falta de time_s/current_A.")
+        print(f"WARNING: {count} invalid row(s) in {path.name} removed due to missing time_s/current_A.")
         df = df.loc[~invalid].reset_index(drop=True)
     return df
 
@@ -83,7 +83,7 @@ def load_table3(path: Path) -> pd.DataFrame:
     required = {"cell", "charge_rate", "diag_number", "cycle_count", "dismissed"}
     missing = required - set(df.columns)
     if missing:
-        raise ValueError(f"Colunas faltando em {path.name}: {missing}")
+        raise ValueError(f"Missing columns in {path.name}: {missing}")
     return df
 
 
@@ -148,8 +148,8 @@ def merge_table3(soh_df: pd.DataFrame, table3_df: pd.DataFrame) -> pd.DataFrame:
     )
     missing = merged["cycle_count"].isna().sum()
     if missing:
-        print(f"AVISO: {missing} linha(s) sem cycle_count após o merge — "
-              "checar se table3_diagnostic_cycles.csv cobre todas as células/diags.")
+        print(f"WARNING: {missing} row(s) without cycle_count after merge — "
+              "check whether table3_diagnostic_cycles.csv covers all cells/diags.")
     return merged
 
 
@@ -241,7 +241,7 @@ def main() -> pd.DataFrame:
 
     print(soh_df[["cell", "diag_number", "charge_rate", "cycle_count", "cycle_count_estimated",
                    "EFC_lab", "discharged_capacity_Ah", "SoH", "dismissed_cell"]])
-    print(f"\nSalvo em: {OUTPUT_FILE}")
+    print(f"\nSaved to: {OUTPUT_FILE}")
     return soh_df
 
 

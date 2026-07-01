@@ -1,40 +1,39 @@
 """
-Fase 3 — Ponte (EFC)
+Phase 3 — Bridge (EFC)
 
-Entradas (vindas de data/processed/):
-    data/processed/battery/battery_soh_curve_corrigido.csv  (saída da Fase 1)
-    data/processed/ev/ev_trip_features.csv                  (saída da Fase 2)
+Inputs (from data/processed/):
+    data/processed/battery/battery_soh_curve_corrigido.csv  (Phase 1 output)
+    data/processed/ev/ev_trip_features.csv                  (Phase 2 output)
 
-Saída:
+Output:
     data/processed/bridge/predicted_degradation.csv
 
-Premissas e decisões documentadas (importante ler antes de interpretar o output):
+Documented assumptions and decisions (important to read before interpreting the output):
 
-1. ORDEM DAS VIAGENS (item 3.1 do plano): o d-EVD não tem timestamp nem
-   sequência real de uso — cada vehID roda as mesmas 21 rotas como
-   simulações independentes, não como um histórico cronológico de um
-   veículo real. `idx` é só o identificador da rota (1 a 21), não ordem
-   de ocorrência. Para construir uma trajetória cumulativa ILUSTRATIVA,
-   ordenamos por `idx` de forma arbitrária e reprodutível — isso afeta
-   o FORMATO da curva intermediária, mas não o EFC_total final (que é
-   uma soma, invariante à ordem).
+1. TRIP ORDER (item 3.1 in the plan): d-EVD has no timestamp or real
+   sequence of use — each vehID runs the same 21 routes as independent
+   simulations, not as a chronological record of a real vehicle. `idx` is
+   only the route identifier (1 to 21), not order of occurrence. To build
+   an illustrative cumulative trajectory, we sort by `idx` arbitrarily and
+   reproducibly — this affects the shape of the intermediate curve, but
+   not the final EFC_total (which is a sum and order invariant).
 
-2. REGRESSÃO SoH(EFC) (item 3.3): ajustamos uma reta forçada pela origem
-   (SoH=1 em EFC=0), separadamente por `charge_rate` e também um modelo
-   "pooled" com todas as células não descontinuadas. Usamos isso para
-   gerar 3 cenários: pessimista (maior taxa de fade observada, células
-   3C), otimista (menor taxa, células C/4) e médio (pooled). Como o
-   d-EVD não informa o comportamento de carregamento do veículo, não há
-   como saber qual cenário é o "certo" — por isso reportamos a faixa.
+2. SoH(EFC) REGRESSION (item 3.3): we fit a line forced through the origin
+   (SoH=1 at EFC=0), separately by `charge_rate` and also a pooled model
+   using all non-dismissed cells. We use this to generate three scenarios:
+   pessimistic (highest observed fade rate, 3C cells), optimistic
+   (lowest rate, C/4 cells) and medium (pooled). Since d-EVD does not
+   report vehicle charging behavior, there is no way to know which
+   scenario is the "correct" one — so we report the range.
 
-3. ESCALA DE EFC: a soma de DoD_equivalente ao longo de 21 viagens é
-   tipicamente pequena (ordem de poucas unidades de EFC) comparada ao
-   range observado no laboratório (até ~245 EFC). Isso é esperado: os
-   21 trajetos representam uma fração mínima da vida útil do veículo,
-   não a vida inteira. SoH previsto vai ficar perto de 1.0 — não é bug.
+3. EFC SCALE: the sum of DoD_equivalente across 21 trips is typically
+   small (order of a few EFC units) compared to the laboratory range
+   observed (up to ~245 EFC). This is expected: the 21 routes represent a
+   minimal fraction of the vehicle's lifetime, not the entire life. Predicted
+   SoH will remain near 1.0 — not a bug.
 
-4. Células descontinuadas (W3, W7) são excluídas do ajuste da curva
-   (comportamento anômalo, não representativo de fade "normal").
+4. Discontinued cells (W3, W7) are excluded from curve fitting
+   (anomalous behavior, not representative of "normal" fade).
 """
 
 from pathlib import Path
@@ -43,7 +42,7 @@ import numpy as np
 import pandas as pd
 
 # ---------------------------------------------------------------------------
-# Configuração
+# Configuration
 # ---------------------------------------------------------------------------
 
 PROCESSED_DIR = Path("data/processed")
@@ -58,9 +57,9 @@ OUTPUT_FILE = PROCESSED_DIR / "bridge" / "predicted_degradation.csv"
 
 def fit_soh_efc_line(efc: np.ndarray, soh: np.ndarray) -> dict:
     """
-    Ajusta SoH = 1 + k*EFC (reta forçada pela origem EFC=0 -> SoH=1).
-    k tende a ser negativo (degradação). Retorna k, R² e o range de EFC
-    observado (para detectar extrapolação depois).
+    Fit SoH = 1 + k*EFC (line forced through the origin EFC=0 -> SoH=1).
+    k tends to be negative (degradation). Returns k, R² and the observed EFC
+    range (to detect extrapolation later).
     """
     y = soh - 1.0
     x = efc
@@ -79,10 +78,10 @@ def fit_all_curves(battery_df: pd.DataFrame) -> dict:
     curves["pooled"] = fit_soh_efc_line(clean["EFC_lab"].to_numpy(), clean["SoH"].to_numpy())
 
     for rate, group in clean.groupby("charge_rate"):
-        if len(group) >= 3:  # evita ajuste instável com poucos pontos
+        if len(group) >= 3:  # avoid unstable fit with too few points
             curves[rate] = fit_soh_efc_line(group["EFC_lab"].to_numpy(), group["SoH"].to_numpy())
 
-    # cenário pessimista = maior |k| (degrada mais rápido); otimista = menor |k|
+    # pessimistic scenario = largest |k| (degrades fastest); optimistic = smallest |k|
     rate_curves = {k: v for k, v in curves.items() if k != "pooled"}
     if rate_curves:
         pessimista_rate = min(rate_curves, key=lambda r: rate_curves[r]["k"])  # k mais negativo
@@ -94,28 +93,28 @@ def fit_all_curves(battery_df: pd.DataFrame) -> dict:
 
 
 def print_curve_diagnostics(curves: dict) -> None:
-    print("=== Curvas SoH(EFC) ajustadas (reta forçada pela origem) ===")
+    print("=== Fitted SoH(EFC) curves (line forced through the origin) ===")
     for name, c in curves.items():
         if name.startswith("_"):
             continue
         print(f"  {name:>8s}: k={c['k']:.6f}/EFC | R²={c['r2']:.3f} | "
-              f"EFC observado=[{c['efc_min']:.1f}, {c['efc_max']:.1f}] | n={c['n_points']}")
+              f"observed EFC=[{c['efc_min']:.1f}, {c['efc_max']:.1f}] | n={c['n_points']}")
     if "_pessimista_rate" in curves:
-        print(f"  -> cenário pessimista = taxa de carga {curves['_pessimista_rate']}")
-        print(f"  -> cenário otimista   = taxa de carga {curves['_otimista_rate']}")
+        print(f"  -> pessimistic scenario = charge rate {curves['_pessimista_rate']}")
+        print(f"  -> optimistic scenario  = charge rate {curves['_otimista_rate']}")
 
 
 # ---------------------------------------------------------------------------
-# 3.1 + 3.2 — Ordenar viagens (arbitrário) e acumular EFC por veículo
+# 3.1 + 3.2 — Sort trips (arbitrary) and accumulate EFC per vehicle
 # ---------------------------------------------------------------------------
 
 def build_vehicle_trajectories(ev_df: pd.DataFrame) -> pd.DataFrame:
-    df = ev_df.sort_values(["vehID", "idx"]).copy()  # ordem arbitrária, ver docstring
+    df = ev_df.sort_values(["vehID", "idx"]).copy()  # arbitrary order, see docstring
     df["trip_order"] = df.groupby("vehID").cumcount() + 1
-    # EFC_cumulative = soma direta de DoD_equivalente entre viagens.
-    # O fator 0.6 do protocolo de laboratório é específico do ciclo de
-    # envelhecimento UDDS (80%->20% SOC) e não se aplica aqui — cada
-    # DoD_equivalente já é a fração real de capacidade usada na viagem.
+    # EFC_cumulative = direct sum of DoD_equivalente across trips.
+    # The 0.6 lab protocol factor is specific to the UDDS aging cycle
+    # (80%->20% SoC) and does not apply here — each DoD_equivalente is
+    # already the actual fraction of capacity used in the trip.
     df["EFC_cumulative"] = df.groupby("vehID")["DoD_equivalente"].cumsum()
     return df
 
@@ -163,11 +162,11 @@ def main() -> pd.DataFrame:
 
     n_extrap = result_df["extrapolado"].sum()
     if n_extrap:
-        print(f"AVISO: {n_extrap} ponto(s) com EFC acumulado acima do range "
-              "observado no laboratório (extrapolação).")
+        print(f"WARNING: {n_extrap} point(s) with cumulative EFC above the "
+              "laboratory observed range (extrapolation).")
 
     print()
-    print("=== EFC total e SoH previsto final, por veículo ===")
+    print("=== Total EFC and final predicted SoH, by vehicle ===")
     summary = result_df.groupby("vehID").agg(
         EFC_total=("EFC_cumulative", "max"),
         SoH_final_medio=("soh_previsto_medio", "min"),
@@ -178,7 +177,7 @@ def main() -> pd.DataFrame:
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
     result_df.to_csv(OUTPUT_FILE, index=False)
-    print(f"\nSalvo em: {OUTPUT_FILE}")
+    print(f"\nSaved to: {OUTPUT_FILE}")
     return result_df
 
 

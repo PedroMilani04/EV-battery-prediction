@@ -1,41 +1,42 @@
 """
-Fase 4, Etapa 3 — Interpretação A1: análise de correlação
+Phase 4, Step 3 — Interpretation A1: correlation analysis
 
-Objetivo: não é um modelo preditivo — é uma análise descritiva para
-entender QUAIS features de condução/rota mais se relacionam com
-DoD_equivalente alto (ou seja, com viagens que consomem mais "fração de
-bateria", e portanto acumulam EFC mais rápido).
+Objective: this is not a predictive model — it is a descriptive analysis
+to understand WHICH driving/route features are most associated with
+high DoD_equivalente (i.e., trips that consume a larger battery fraction
+and therefore accumulate EFC faster).
 
-Entrada:
-    data/processed/ev/ev_trip_features.csv  (saída da Fase 2)
+Input:
+    data/processed/ev/ev_trip_features.csv  (Phase 2 output)
 
-Saídas (tudo salvo em data/processed/analysis/):
-    correlation_matrix.csv       — matriz de correlação completa (Pearson e Spearman)
-    correlation_with_target.csv  — ranking de correlação de cada feature com DoD_equivalente
-    correlation_heatmap.png      — heatmap visual da matriz de correlação
-    scatter_top_features.png     — scatterplots das 4 features mais correlacionadas vs DoD_equivalente
-    correlation_by_vehicle.csv   — a mesma correlação, mas quebrada por vehID (para ver se o
-                                    padrão muda entre modelos de veículo)
+Outputs (all saved in data/processed/analysis/):
+    correlation_matrix.csv       — full correlation matrix (Pearson and Spearman)
+    correlation_with_target.csv  — ranking of each feature's correlation with DoD_equivalente
+    correlation_heatmap.png      — visual heatmap of the correlation matrix
+    scatter_top_features.png     — scatterplots of the 4 top-correlated features vs DoD_equivalente
+    correlation_by_vehicle.csv   — the same correlation broken down by vehID (to see whether
+                                    the pattern changes across vehicle models)
 
-Como rodar:
+How to run:
     python fase4_correlation_analysis.py
 
-Dependências:
+Dependencies:
     pandas, numpy, matplotlib, seaborn, scipy
     pip install pandas numpy matplotlib seaborn scipy
 
-Notas de interpretação:
-- Correlação não é causalidade. Isso é puramente exploratório.
-- Pearson mede relação LINEAR; Spearman mede relação MONOTÔNICA (mais
-  robusta a outliers e a relações não-lineares, mas não-paramétrica).
-  Reportamos os dois — se divergem muito, é sinal de relação não-linear.
-- target = DoD_equivalente (é literalmente o EFC por viagem, então essa
-  análise responde "o que aumenta o consumo de EFC por viagem").
-- Features que são redundantes com o target por construção (ex: DoD_pct,
-  net_energy_Wh, C_rate_medio) são mantidas na matriz mas marcadas
-  separadamente — elas são derivadas quase diretamente do mesmo cálculo
-  e vão sempre correlacionar quase perfeitamente; não são insight, são
-  esperado por definição.
+Interpretation notes:
+- Correlation is not causation. This is purely exploratory.
+- Pearson measures LINEAR relationship; Spearman measures MONOTONIC
+  relationship (more robust to outliers and non-linear relations, but nonparametric).
+  We report both — if they diverge substantially, it is a sign of non-linear
+  relationship.
+- target = DoD_equivalente (it is literally EFC per trip, so this analysis
+  answers "what increases EFC consumption per trip").
+- Features that are redundant with the target by construction (e.g. DoD_pct,
+  net_energy_Wh, C_rate_medio) are retained in the matrix but marked
+  separately — they are derived almost directly from the same calculation
+  and will always correlate nearly perfectly; they are not insight, they are
+  expected by definition.
 """
 
 from pathlib import Path
@@ -47,7 +48,7 @@ import seaborn as sns
 from scipy.stats import pearsonr, spearmanr
 
 # ---------------------------------------------------------------------------
-# Configuração
+# Configuration
 # ---------------------------------------------------------------------------
 
 PROCESSED_DIR = Path("data/processed")
@@ -56,8 +57,8 @@ OUTPUT_DIR = PROCESSED_DIR / "analysis"
 
 TARGET = "DoD_equivalente"
 
-# Features candidatas para a análise (exclui identificadores e colunas de
-# metadado puro, que não são "comportamento de condução" propriamente).
+# Candidate features for analysis (excludes identifiers and pure metadata
+# columns that are not actual driving behavior).
 CANDIDATE_FEATURES = [
     "C_rate_medio",
     "aggressive_events_per_km",
@@ -71,33 +72,33 @@ CANDIDATE_FEATURES = [
     "wind",
 ]
 
-# Features redundantes por construção com o target — mantidas na matriz
-# completa, mas excluídas do ranking de "insight" para não confundir
-# correlação-por-definição com correlação-por-comportamento-de-condução.
+# Features redundant with the target by construction — kept in the full
+# matrix, but excluded from the "insight" ranking so that definitionally
+# induced correlation is not mistaken for driving-behavior correlation.
 DEFINITIONALLY_REDUNDANT = ["DoD_pct", "net_energy_Wh", "nominal_capacity_Wh"]
 
 TOP_N_SCATTER = 4
 
 
 # ---------------------------------------------------------------------------
-# Carga e validação
+# Loading and validation
 # ---------------------------------------------------------------------------
 
 def load_data(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     missing_target = TARGET not in df.columns
     if missing_target:
-        raise ValueError(f"Coluna target '{TARGET}' não encontrada em {path.name}")
+        raise ValueError(f"Target column '{TARGET}' not found in {path.name}")
 
     missing_features = [f for f in CANDIDATE_FEATURES if f not in df.columns]
     if missing_features:
-        print(f"AVISO: features não encontradas no CSV, serão ignoradas: {missing_features}")
+        print(f"WARNING: features not found in CSV will be ignored: {missing_features}")
 
     return df
 
 
 # ---------------------------------------------------------------------------
-# Cálculo de correlações
+# Correlation calculations
 # ---------------------------------------------------------------------------
 
 def compute_correlation_matrix(df: pd.DataFrame, columns: list) -> pd.DataFrame:
@@ -148,7 +149,7 @@ def compute_correlation_by_vehicle(df: pd.DataFrame, features: list, target: str
 
 
 # ---------------------------------------------------------------------------
-# Visualizações
+# Visualizations
 # ---------------------------------------------------------------------------
 
 def plot_heatmap(corr_matrix: pd.DataFrame, output_path: Path) -> None:
@@ -156,9 +157,9 @@ def plot_heatmap(corr_matrix: pd.DataFrame, output_path: Path) -> None:
     mask = np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)
     sns.heatmap(
         corr_matrix, mask=mask, annot=True, fmt=".2f", cmap="coolwarm",
-        center=0, vmin=-1, vmax=1, square=True, cbar_kws={"label": "Correlação de Pearson"},
+        center=0, vmin=-1, vmax=1, square=True, cbar_kws={"label": "Pearson correlation"},
     )
-    plt.title("Matriz de correlação — features de rota (d-EVD)")
+    plt.title("Correlation matrix — route features (d-EVD)")
     plt.tight_layout()
     plt.savefig(output_path, dpi=150)
     plt.close()
@@ -170,7 +171,7 @@ def plot_top_scatters(df: pd.DataFrame, target_corr: pd.DataFrame, target: str,
     top_features = insight_only.head(n)["feature"].tolist()
 
     if not top_features:
-        print("Nenhuma feature disponível para scatterplot.")
+        print("No features available for scatterplot.")
         return
 
     n_cols = 2
@@ -193,7 +194,7 @@ def plot_top_scatters(df: pd.DataFrame, target_corr: pd.DataFrame, target: str,
 
 
 # ---------------------------------------------------------------------------
-# Pipeline principal
+# Main pipeline
 # ---------------------------------------------------------------------------
 
 def main() -> None:
@@ -204,19 +205,20 @@ def main() -> None:
     all_columns_for_matrix = available_features + DEFINITIONALLY_REDUNDANT + [TARGET]
     all_columns_for_matrix = [c for c in all_columns_for_matrix if c in df.columns]
 
-    # Matriz completa (inclui as redundantes por definição, para contexto)
+    # Full matrix (includes definitionally redundant features for context)
     corr_matrix = compute_correlation_matrix(df, all_columns_for_matrix)
     corr_matrix.to_csv(OUTPUT_DIR / "correlation_matrix.csv")
 
-    # Ranking de correlação com o target (todas as features, incluindo redundantes,
-    # mas plot de scatter exclui as redundantes — ver compute_target_correlations)
+    # Correlation ranking with the target (all features, including redundant ones,
+    # but scatter plot excludes the redundant features — see compute_target_correlations)
     target_corr = compute_target_correlations(
         df, available_features + DEFINITIONALLY_REDUNDANT, TARGET
     )
     target_corr.to_csv(OUTPUT_DIR / "correlation_with_target.csv", index=False)
 
-    # Correlação por veículo (insight comportamental — vai além da Fase 4 plano original,
-    # mas é direto de computar e relevante: será que a relação muda por modelo de carro?)
+    # Correlation by vehicle (behavioral insight — goes beyond the original
+    # Phase 4 plan, but is easy to compute and relevant: does the relationship
+    # change by vehicle model?)
     by_vehicle = compute_correlation_by_vehicle(df, available_features, TARGET)
     by_vehicle.to_csv(OUTPUT_DIR / "correlation_by_vehicle.csv", index=False)
 
@@ -224,24 +226,24 @@ def main() -> None:
     plot_heatmap(corr_matrix, OUTPUT_DIR / "correlation_heatmap.png")
     plot_top_scatters(df, target_corr, TARGET, TOP_N_SCATTER, OUTPUT_DIR / "scatter_top_features.png")
 
-    # ---- Print de resumo no terminal ----
+    # ---- Summary output to terminal ----
     print("=" * 70)
-    print(f"Análise de correlação — target = {TARGET}")
+    print(f"Correlation analysis — target = {TARGET}")
     print("=" * 70)
-    print(f"\n{len(df)} observações (vehID x rota) carregadas de {INPUT_FILE.name}\n")
+    print(f"\n{len(df)} observations (vehID x route) loaded from {INPUT_FILE.name}\n")
 
-    print("--- Ranking de correlação com o target (todas as features) ---")
+    print("--- Correlation ranking with the target (all features) ---")
     print(target_corr.to_string(index=False))
-    print(f"\n(*) Features em {DEFINITIONALLY_REDUNDANT} são redundantes por construção")
-    print("    com DoD_equivalente — correlação alta nelas é esperada, não é insight.\n")
+    print(f"\n(*) Features in {DEFINITIONALLY_REDUNDANT} are redundant by construction")
+    print("    with DoD_equivalente — high correlation there is expected, not insight.\n")
 
-    print("--- Maior divergência entre Pearson e Spearman (sinal de não-linearidade) ---")
+    print("--- Largest divergence between Pearson and Spearman (sign of nonlinearity) ---")
     target_corr["delta_pearson_spearman"] = (target_corr["pearson_r"] - target_corr["spearman_r"]).abs()
     print(target_corr.sort_values("delta_pearson_spearman", ascending=False).head(5)[
         ["feature", "pearson_r", "spearman_r", "delta_pearson_spearman"]
     ].to_string(index=False))
 
-    print(f"\nArquivos salvos em: {OUTPUT_DIR}/")
+    print(f"\nFiles saved in: {OUTPUT_DIR}/")
     print("  - correlation_matrix.csv")
     print("  - correlation_with_target.csv")
     print("  - correlation_by_vehicle.csv")
