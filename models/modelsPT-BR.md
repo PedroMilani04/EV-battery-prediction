@@ -91,3 +91,13 @@ Disponível em: /data/processed/analysis/
 No geral, tamanho da rota explica quase tudo (~74% da variância via r²≈0.86²); topografia (subida) adiciona um efeito real, mas menor; estilo de condução agressivo parece ter efeito, mas está confundido pela normalização por km; e os parâmetros de configuração da simulação (tráfego, ocupação, AC, vento) não mostram efeito detectável nessa análise simples
 
 ### Modelos de Aprendizado
+Modelo escolhido: XGBoost 
+Em especial pela profundidade de árvores e generalização proporcionadas.
+
+A ideia principal é a de testar o modelo sem e com vehID como um one-hot encoding, visando um possível aumento de desempenho. Na ideia inicial, de interpretação de comportamento de condução, o vehID não teria tanto sentido, mas visando um aumento no ganho de R^2 no valor das predições, ele foi adotado como uma dummy feature. 
+
+O teste com vehID apresentou um aumento significativo, de cerca de 0.85 de R^2 para 0.95. Os resíduos continuam seguindo a mesma forma de aleatóridade, o que é um bom sinal, sem aparente vazamento de dados. 
+
+Disponível em: /data/processed/models/
+
+

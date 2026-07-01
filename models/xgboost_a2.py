@@ -2,17 +2,15 @@
 Fase 4, Interpretação A2 v2 — XGBoost com vehID como dummy
 
 Mudanças em relação à versão anterior:
-- Modelo: Decision Tree (depth=3) → XGBoost
 - vehID incluído como dummy (one-hot encoding) — proxy legítima de
   capacidade nominal do pack, que resolve o viés sistemático por veículo
   que observamos nos resíduos da versão anterior (eUp/i3 subestimados,
   ID4/ID3 superestimados).
-- Modelos lineares e interações removidos — foco total no XGBoost.
 - Adicionado: busca de hiperparâmetros via GridSearchCV aninhado ao
   LOO-CV, e SHAP values para interpretabilidade.
 
 Por que XGBoost e não Random Forest ou Decision Tree profunda:
-- n=105 é pequeno — boosting com árvores rasas (max_depth 2-4) generaliza
+- n=105, por exemplo, é pequeno — boosting com árvores rasas (max_depth 2-4) generaliza
   melhor que uma tree profunda ou RF com muitas árvores nesse regime.
 - XGBoost tem regularização nativa (lambda, alpha) que controla overfitting
   explicitamente, ao contrário de uma Decision Tree simples.
@@ -20,7 +18,7 @@ Por que XGBoost e não Random Forest ou Decision Tree profunda:
   interpretabilidade sem custo extra.
 
 Por que vehID como dummy é legítimo aqui (vs. versão anterior):
-- Na v1, excluímos vehID porque ele covaría com nominal_capacity_Wh
+- Na v1, excluímos vehID porque ele covária com nominal_capacity_Wh
   (que é redundante com o target). Mas o viés sistemático que observamos
   por veículo prova que existe informação real no vehID além da capacidade
   — estilo aerodinâmico, eficiência do motor, peso, regeneração — que
@@ -48,7 +46,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from sklearn.model_selection import LeaveOneOut, GridSearchCV, cross_val_predict
+from sklearn.model_selection import LeaveOneOut, GridSearchCV
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
@@ -127,7 +125,6 @@ def evaluate_xgb(X: np.ndarray, y: np.ndarray, label: str) -> dict:
     Para cada fold LOO, o GridSearchCV encontra os melhores hiperparâmetros
     usando os n-1 exemplos de treino — evita vazamento de informação do
     teste para a seleção de hiperparâmetros.
-    Nota: com n=105, isso roda 105 × n_grid fits. Pode demorar ~1-2 min.
     """
     loo = LeaveOneOut()
     y_pred = np.zeros(len(y))
